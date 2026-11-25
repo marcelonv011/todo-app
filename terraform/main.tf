@@ -50,6 +50,7 @@ resource "azurerm_public_ip" "app" {
 # La VM privada de MongoDB requiere salida explícita para apt y docker pull.
 # NAT Gateway y esta IP pública generan costos por hora/tráfico.
 resource "azurerm_public_ip" "nat" {
+  count               = var.enable_nat_gateway ? 1 : 0
   name                = "pip-${local.prefix}-nat"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
@@ -59,6 +60,7 @@ resource "azurerm_public_ip" "nat" {
 }
 
 resource "azurerm_nat_gateway" "db" {
+  count                   = var.enable_nat_gateway ? 1 : 0
   name                    = "nat-${local.prefix}-db"
   location                = azurerm_resource_group.main.location
   resource_group_name     = azurerm_resource_group.main.name
@@ -68,13 +70,15 @@ resource "azurerm_nat_gateway" "db" {
 }
 
 resource "azurerm_nat_gateway_public_ip_association" "db" {
-  nat_gateway_id       = azurerm_nat_gateway.db.id
-  public_ip_address_id = azurerm_public_ip.nat.id
+  count                = var.enable_nat_gateway ? 1 : 0
+  nat_gateway_id       = azurerm_nat_gateway.db[0].id
+  public_ip_address_id = azurerm_public_ip.nat[0].id
 }
 
 resource "azurerm_subnet_nat_gateway_association" "db" {
+  count          = var.enable_nat_gateway ? 1 : 0
   subnet_id      = azurerm_subnet.db.id
-  nat_gateway_id = azurerm_nat_gateway.db.id
+  nat_gateway_id = azurerm_nat_gateway.db[0].id
 }
 
 resource "azurerm_network_security_group" "app" {
