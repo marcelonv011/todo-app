@@ -8,3 +8,7 @@ ssh_public_key  = "ssh-ed25519 AAAA_REEMPLAZAR... usuario@pc"
 # Si Azure no admite Standard_B2s en tu suscripción o región, cambiar aquí.
 app_vm_size = "Standard_B2s"
 db_vm_size  = "Standard_B2s"
+
+# true: VM privada puede descargar actualizaciones e imagenes de Docker.
+# false: destruye el NAT Gateway y su IP publica al aplicar el plan; mantener las VMs y discos.
+enable_nat_gateway = true
