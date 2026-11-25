@@ -1,0 +1,20 @@
+---
+- name: Atualizar o sistema operacional quando solicitado
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    upgrade: dist
+  when: update_os | bool
+
+- name: Verificar necessidade de reinício após atualização
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: restart_needed
+  when: update_os | bool
+
+- name: Reiniciar VM somente quando o sistema solicitar
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  when:
+    - update_os | bool
+    - restart_needed.stat.exists | default(false)

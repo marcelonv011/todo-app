@@ -1,0 +1,18 @@
+---
+# Exemplo. Nunca usar os endereços fictícios abaixo para conexão real.
+# Gerar hosts.yml com os outputs reais do Terraform após o apply.
+all:
+  vars:
+    ansible_user: azureuser
+    ansible_ssh_private_key_file: ~/.ssh/id_pm04_azure
+    ansible_python_interpreter: /usr/bin/python3
+  children:
+    app:
+      hosts:
+        vm-app:
+          ansible_host: 203.0.113.10
+    db:
+      hosts:
+        vm-db:
+          ansible_host: 10.42.2.4
+          ansible_ssh_common_args: '-o ProxyJump=azureuser@203.0.113.10'

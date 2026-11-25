@@ -1,0 +1,6 @@
+# Os IPs reais e as credenciais não devem ir ao Git.
+inventory/hosts.yml
+*.retry
+*.pem
+*.key
+.env

@@ -1,0 +1,13 @@
+---
+- name: Normalizar pacotes extras passados pela pipeline
+  ansible.builtin.set_fact:
+    parsed_extra_packages: >-
+      {{ (extra_packages.split(',') | map('trim') | reject('equalto', '') | list)
+         if extra_packages is string else extra_packages }}
+
+- name: Garantir pacotes base e opcionais instalados
+  ansible.builtin.apt:
+    name: "{{ base_packages + parsed_extra_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600

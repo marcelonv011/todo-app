@@ -1,0 +1,12 @@
+---
+- name: Preparar e manter os dois servidores do ToDo App
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: os_updates
+    - role: packages
+    - role: docker
+
+# Próxima etapa: configurar volumes, usuário MongoDB, contêineres
+# e verificações de saúde nas roles específicas de app e db.
