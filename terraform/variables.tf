@@ -59,3 +59,10 @@ variable "mongo_disk_gb" {
   description = "Tamaño de disco independiente destinado a datos MongoDB"
   default     = 32
 }
+
+# Controla los recursos NAT y su IP publica asociados a la subred privada de DB.
+variable "enable_nat_gateway" {
+  type        = bool
+  description = "Si true, crea NAT Gateway para salida a internet de la VM MongoDB. Si false, elimina NAT e IP publica sin tocar las VMs ni discos."
+  default     = true
+}
