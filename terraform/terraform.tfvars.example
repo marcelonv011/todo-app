@@ -1,0 +1,10 @@
+# Copia este archivo como terraform.tfvars y coloca tus valores.
+# No lo subas a GitHub. La CLAVE PUBLICA no es secreta.
+subscription_id = "00000000-0000-0000-0000-000000000000"
+location        = "brazilsouth"
+admin_cidr      = "203.0.113.10/32"  # reemplazar por TU IP pública real
+ssh_public_key  = "ssh-ed25519 AAAA_REEMPLAZAR... usuario@pc"
+
+# Si Azure no admite Standard_B2s en tu suscripción o región, cambiar aquí.
+app_vm_size = "Standard_B2s"
+db_vm_size  = "Standard_B2s"

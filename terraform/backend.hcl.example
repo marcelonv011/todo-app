@@ -1,0 +1,7 @@
+# EJEMPLO. Crear primero Storage Account + Blob Container.
+# Renombrar a backend.hcl (ignorado por .gitignore) y rellenar.
+resource_group_name  = "rg-pm04-terraform-state"
+storage_account_name = "REEMPLAZAR_NOMBRE_UNICO"
+container_name       = "tfstate"
+key                  = "todo/dev.terraform.tfstate"
+use_azuread_auth     = true
