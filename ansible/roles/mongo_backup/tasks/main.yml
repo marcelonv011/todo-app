@@ -47,3 +47,10 @@
 - name: Verificar instalacion de AzCopy
   ansible.builtin.command: azcopy --version
   changed_when: false
+- name: Instalar script de restauracion de prueba MongoDB
+  ansible.builtin.copy:
+    src: pm04-restore-test.sh
+    dest: /usr/local/sbin/pm04-restore-test.sh
+    owner: root
+    group: root
+    mode: '0700'
