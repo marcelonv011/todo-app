@@ -1,0 +1,9 @@
+---
+- name: Instalar MongoDB en la VM privada
+  hosts: db
+  become: true
+  gather_facts: false
+
+  roles:
+    - mongo_storage
+    - mongo

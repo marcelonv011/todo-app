@@ -1,0 +1,75 @@
+---
+- name: Verificar que el disco de MongoDB este montado
+  ansible.builtin.command: findmnt -n /data/mongodb
+  changed_when: false
+
+- name: Crear directorio de datos MongoDB
+  ansible.builtin.file:
+    path: /data/mongodb/db
+    state: directory
+    mode: '0755'
+
+- name: Crear directorio de configuracion
+  ansible.builtin.file:
+    path: /opt/todo-mongo
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Copiar Docker Compose
+  ansible.builtin.copy:
+    src: compose.yml
+    dest: /opt/todo-mongo/compose.yml
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Copiar script de inicializacion
+  ansible.builtin.copy:
+    src: init-app-user.js
+    dest: /opt/todo-mongo/init-app-user.js
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Generar credenciales desde Ansible Vault
+  ansible.builtin.template:
+    src: mongo.env.j2
+    dest: /opt/todo-mongo/.env
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
+- name: Iniciar MongoDB con Docker Compose
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: /opt/todo-mongo
+  register: mongo_compose
+  changed_when: >
+    ('Created' in (mongo_compose.stdout ~ mongo_compose.stderr)) or
+    ('Started' in (mongo_compose.stdout ~ mongo_compose.stderr)) or
+    ('Recreated' in (mongo_compose.stdout ~ mongo_compose.stderr))
+
+- name: Esperar el puerto privado de MongoDB
+  ansible.builtin.wait_for:
+    host: 10.42.2.4
+    port: 27017
+    timeout: 120
+
+- name: Comprobar que MongoDB responde
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - todo-mongo
+      - mongosh
+      - --quiet
+      - --eval
+      - 'db.adminCommand({ping:1}).ok'
+  register: mongo_ping
+  changed_when: false
+  until: (mongo_ping.stdout | trim) == '1'
+  retries: 12
+  delay: 5

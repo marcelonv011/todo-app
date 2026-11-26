@@ -1,0 +1,11 @@
+---
+- name: Desplegar ToDo App en Azure
+  hosts: app
+  become: true
+  gather_facts: true
+
+  vars_files:
+    - group_vars/db/vault.yml
+
+  roles:
+    - app_deploy

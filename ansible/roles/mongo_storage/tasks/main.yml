@@ -1,0 +1,38 @@
+---
+- name: Identificar formato actual del disco
+  ansible.builtin.command:
+    cmd: lsblk -dn -o FSTYPE /dev/disk/azure/scsi1/lun0
+  register: mongo_fs
+  changed_when: false
+
+- name: Impedir cambios sobre un formato inesperado
+  ansible.builtin.assert:
+    that:
+      - (mongo_fs.stdout | trim) in ['', 'ext4']
+    fail_msg: "El disco tiene un formato inesperado. No se modificara."
+
+- name: Crear ext4 solamente en el disco sin formato
+  community.general.filesystem:
+    fstype: ext4
+    dev: /dev/disk/azure/scsi1/lun0
+    force: false
+  when: (mongo_fs.stdout | trim) == ''
+
+- name: Obtener UUID del disco
+  ansible.builtin.command:
+    cmd: blkid -s UUID -o value /dev/disk/azure/scsi1/lun0
+  register: mongo_uuid
+  changed_when: false
+
+- name: Verificar UUID del disco
+  ansible.builtin.assert:
+    that:
+      - (mongo_uuid.stdout | trim | length) > 0
+
+- name: Montar disco persistente de MongoDB
+  ansible.posix.mount:
+    path: /data/mongodb
+    src: "UUID={{ mongo_uuid.stdout | trim }}"
+    fstype: ext4
+    opts: defaults,nofail
+    state: mounted

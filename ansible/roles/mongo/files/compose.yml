@@ -1,0 +1,25 @@
+services:
+  mongo:
+    image: mongo:8.0
+    container_name: todo-mongo
+    restart: unless-stopped
+
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD}
+
+    ports:
+      - "10.42.2.4:27017:27017"
+
+    volumes:
+      - /data/mongodb/db:/data/db
+      - ./init-app-user.js:/docker-entrypoint-initdb.d/init-app-user.js:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' | grep -q '^1$'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s

@@ -1,0 +1,78 @@
+---
+- name: Descargar ToDo App desde GitHub
+  ansible.builtin.git:
+    repo: https://github.com/marcelonv011/todo-app.git
+    dest: /opt/todo-app
+    version: main
+    update: true
+  register: app_repo
+
+- name: Generar conexion segura a MongoDB
+  ansible.builtin.template:
+    src: backend.env.j2
+    dest: /opt/todo-app/backend.env
+    owner: root
+    group: root
+    mode: '0600'
+  register: app_env
+  no_log: true
+
+- name: Verificar configuracion de Docker Compose
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.azure.yaml config -q
+    chdir: /opt/todo-app
+  changed_when: false
+
+- name: Verificar si el backend esta ejecutandose
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - name=^/todo-backend$
+  register: backend_running
+  changed_when: false
+
+- name: Verificar si el frontend esta ejecutandose
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - name=^/todo-frontend$
+  register: frontend_running
+  changed_when: false
+
+- name: Verificar si Caddy esta ejecutandose
+  ansible.builtin.command:
+    argv:
+      - docker
+      - ps
+      - --quiet
+      - --filter
+      - name=^/todo-caddy$
+  register: caddy_running
+  changed_when: false
+
+- name: Construir e iniciar la aplicacion
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose.azure.yaml up -d --build
+    chdir: /opt/todo-app
+  when: >
+    app_repo.changed or
+    app_env.changed or
+    (backend_running.stdout | trim) == '' or
+    (frontend_running.stdout | trim) == '' or
+    (caddy_running.stdout | trim) == ''
+
+- name: Comprobar que la API responde correctamente
+  ansible.builtin.uri:
+    url: https://20-226-46-100.sslip.io/todos
+    status_code: 200
+  register: app_health
+  until: (app_health.status | default(0)) == 200
+  retries: 20
+  delay: 5
+  changed_when: false
