@@ -1,0 +1,8 @@
+---
+- name: Configurar backups automaticos de MongoDB
+  hosts: db
+  become: true
+  gather_facts: true
+
+  roles:
+    - mongo_backup

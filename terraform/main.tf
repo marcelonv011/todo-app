@@ -263,6 +263,9 @@ resource "azurerm_linux_virtual_machine" "db" {
   disable_password_authentication = true
   network_interface_ids           = [azurerm_network_interface.db.id]
   tags                            = local.tags
+  identity {
+    type = "SystemAssigned"
+  }
 
   admin_ssh_key {
     username   = var.admin_username

@@ -1,0 +1,49 @@
+---
+- name: Crear directorio seguro para backups
+  ansible.builtin.file:
+    path: /var/backups/pm04-mongodb
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Instalar script de backup MongoDB
+  ansible.builtin.copy:
+    src: pm04-mongo-backup.sh
+    dest: /usr/local/sbin/pm04-mongo-backup.sh
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Programar backup automatico diario
+  ansible.builtin.cron:
+    name: "PM04 - backup diario MongoDB"
+    user: root
+    minute: "15"
+    hour: "3"
+    job: "/usr/local/sbin/pm04-mongo-backup.sh >> /var/log/pm04-mongo-backup.log 2>&1"
+- name: Crear directorio de instalacion AzCopy
+  ansible.builtin.file:
+    path: /opt/pm04-azcopy
+    state: directory
+    mode: '0755'
+
+- name: Descargar AzCopy desde Microsoft
+  ansible.builtin.get_url:
+    url: https://aka.ms/downloadazcopy-v10-linux
+    dest: /tmp/pm04-azcopy.tar.gz
+    mode: '0644'
+
+- name: Instalar AzCopy
+  ansible.builtin.shell: |
+    set -eu
+    tar -xzf /tmp/pm04-azcopy.tar.gz -C /opt/pm04-azcopy
+    find /opt/pm04-azcopy -type f -name azcopy \
+      -exec install -m 0755 {} /usr/local/bin/azcopy \;
+    test -x /usr/local/bin/azcopy
+  args:
+    creates: /usr/local/bin/azcopy
+
+- name: Verificar instalacion de AzCopy
+  ansible.builtin.command: azcopy --version
+  changed_when: false
