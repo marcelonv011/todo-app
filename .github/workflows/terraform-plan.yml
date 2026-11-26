@@ -1,0 +1,80 @@
+name: Terraform - Plan Infraestructura
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-plan.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Planificar infraestructura Azure
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    if: github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    defaults:
+      run:
+        working-directory: terraform
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_TERRAFORM_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+      TF_IN_AUTOMATION: "true"
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Autenticarse en Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_TERRAFORM_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.17.2'
+
+      - name: Cargar variables protegidas
+        shell: bash
+        env:
+          TFVARS_CONTENT: ${{ secrets.TF_VARS }}
+        run: |
+          if [ -z "$TFVARS_CONTENT" ]; then
+            echo "::error::Falta el secreto TF_VARS"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$TFVARS_CONTENT" > terraform.tfvars
+
+      - name: Inicializar estado remoto
+        run: |
+          terraform init -input=false -reconfigure \
+            -backend-config="resource_group_name=rg-tudoapp-projetointegrador-state" \
+            -backend-config="storage_account_name=tudoappprojetointegrador" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=todo/dev.terraform.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Validar Terraform
+        run: terraform validate
+
+      - name: Ejecutar Terraform Plan
+        run: terraform plan -input=false -no-color -lock-timeout=5m
