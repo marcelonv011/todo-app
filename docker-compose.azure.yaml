@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: todo-backend
+    restart: unless-stopped
+    env_file:
+      - /opt/todo-app/backend.env
+    expose:
+      - "5000"
+    networks:
+      - todo-net
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: todo-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - todo-net
+
+networks:
+  todo-net:
+    driver: bridge
