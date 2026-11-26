@@ -1,0 +1,4 @@
+20-226-46-100.sslip.io {
+    encode gzip
+    reverse_proxy frontend:80
+}
