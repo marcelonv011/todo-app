@@ -1,8 +1,22 @@
 import { render, screen } from '@testing-library/react';
+import axios from 'axios';
 import App from './App';
 
-test('renders learn react link', () => {
+jest.mock('axios');
+
+test('muestra las tareas obtenidas de la API', async () => {
+  axios.get.mockResolvedValue({
+    data: [
+      {
+        _id: '1',
+        text: 'Teste CI',
+        completed: false,
+      },
+    ],
+  });
+
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+
+  expect(await screen.findByText('Teste CI')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Adicionar' })).toBeInTheDocument();
 });

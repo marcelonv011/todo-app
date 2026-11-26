@@ -1,0 +1,102 @@
+name: CI - ToDo App
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Validar React
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar pruebas
+        run: CI=true npm test -- --watchAll=false --runInBand
+
+  backend:
+    name: Validar Node.js
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Verificar sintaxis
+        run: node --check index.js
+
+  docker:
+    name: Construir imagenes Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Construir frontend
+        run: docker build -t todo-frontend:ci ./frontend
+
+      - name: Construir backend
+        run: docker build -t todo-backend:ci ./backend
+
+  terraform:
+    name: Validar infraestructura
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.17.2'
+
+      - name: Verificar formato
+        run: terraform fmt -check
+
+      - name: Inicializar sin backend remoto
+        run: terraform init -backend=false
+
+      - name: Validar Terraform
+        run: terraform validate
