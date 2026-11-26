@@ -7,13 +7,20 @@ const bodyParser = require('body-parser');
 const app = express();
 const port = 5000;
 
-// Conexão com o MongoDB (com autenticação)
-mongoose.connect('mongodb://root:rootpassword@mongo-todo:27017/todo-app?authSource=admin', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+// Conexao com MongoDB por variavel de ambiente
+const mongoUri = process.env.MONGODB_URI;
+
+if (!mongoUri) {
+  console.error('MONGODB_URI nao configurada');
+  process.exit(1);
+}
+
+mongoose.connect(mongoUri)
   .then(() => console.log('Conectado ao MongoDB'))
-  .catch((err) => console.error('Erro ao conectar ao MongoDB:', err));
+  .catch((err) => {
+    console.error('Erro ao conectar ao MongoDB:', err);
+    process.exit(1);
+  });
 
 // Middleware para habilitar CORS e processar JSON
 app.use(cors());
