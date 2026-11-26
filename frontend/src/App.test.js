@@ -2,7 +2,13 @@ import { render, screen } from '@testing-library/react';
 import axios from 'axios';
 import App from './App';
 
-jest.mock('axios');
+// Simular Axios sin cargar su modulo real
+jest.mock('axios', () => ({
+  get: jest.fn(),
+  post: jest.fn(),
+  patch: jest.fn(),
+  delete: jest.fn(),
+}));
 
 test('muestra las tareas obtenidas de la API', async () => {
   axios.get.mockResolvedValue({
@@ -18,5 +24,8 @@ test('muestra las tareas obtenidas de la API', async () => {
   render(<App />);
 
   expect(await screen.findByText('Teste CI')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Adicionar' })).toBeInTheDocument();
+
+  expect(
+    screen.getByRole('button', { name: 'Adicionar' })
+  ).toBeInTheDocument();
 });
