@@ -108,7 +108,7 @@ jobs:
     timeout-minutes: 25
 
     concurrency:
-      group: pm04-cd
+      group: pm04-terraform-apply
       cancel-in-progress: false
 
     permissions:
