@@ -1,0 +1,140 @@
+name: PM04 - Testes Finais Terraform e Ansible
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pm04-testes-finais.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pm04-terraform-apply
+  cancel-in-progress: false
+
+jobs:
+  testes:
+    name: Atualizacao e idempotencia na mesma pipeline
+    if: github.event.head_commit.message == 'Executar testes finais integrados PM04'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_TERRAFORM_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+      TF_VAR_demonstration_tag: etapa2
+      TF_IN_AUTOMATION: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_TERRAFORM_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Preparar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.17.2'
+
+      - name: Variables protegidas
+        shell: bash
+        env:
+          TFVARS_CONTENT: ${{ secrets.TF_VARS }}
+        run: |
+          set -euo pipefail
+          test -n "$TFVARS_CONTENT"
+          umask 077
+          printf '%s\n' "$TFVARS_CONTENT" > terraform/terraform.tfvars
+
+      - name: Iniciar Terraform remoto
+        shell: bash
+        run: |
+          terraform -chdir=terraform init -input=false -reconfigure \
+            -backend-config="resource_group_name=rg-tudoapp-projetointegrador-state" \
+            -backend-config="storage_account_name=tudoappprojetointegrador" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=todo/dev.terraform.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Cenario 2 - Atualizacao - Terraform e Ansible
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "::group::Cenario 2 - Atualizacao: Terraform plan"
+          terraform -chdir=terraform plan -input=false -no-color -lock-timeout=5m -out=plan-atualizar.bin
+          terraform -chdir=terraform show -json plan-atualizar.bin | jq -e '
+            def permitido:
+              .change.actions == ["no-op"] or
+              (.address == "azurerm_resource_group.main"
+               and .change.actions == ["update"]
+               and ((.change.before | del(.tags,.tags_all)) ==
+                    (.change.after | del(.tags,.tags_all))));
+            [.resource_changes[]? | select(permitido | not)] | length == 0
+          '
+          echo "PM04_TERRAFORM_UPDATE_PLANEJADO"
+          echo "::endgroup::"
+          terraform -chdir=terraform apply -input=false -no-color plan-atualizar.bin
+          echo "::group::Cenario 2 - Atualizacao: Ansible via Azure Run Command"
+          RESULTADO=$(az vm run-command invoke \
+            --resource-group rg-tudoapp-projetointegrador-dev \
+            --name vm-tudoapp-projetointegrador-dev-app \
+            --command-id RunShellScript \
+            --scripts @scripts/pm04-ansible-run-command.sh \
+            --parameters "$GITHUB_SHA" stable-alpine jq false \
+            --query 'value[].message' -o tsv)
+          echo "$RESULTADO"
+          [[ "$RESULTADO" == *"PM04_ANSIBLE_OK"* ]] || { echo "::error::Ansible nao confirmou a manutencao"; exit 1; }
+          echo "PM04_ANSIBLE_ATUALIZADO_OK"
+          echo "::endgroup::"
+          curl -fsS --retry 5 --retry-delay 5 https://20-226-46-100.sslip.io/todos >/dev/null
+          echo "PM04_ATUALIZACAO_OK"
+
+      - name: Cenario 3 - Reexecucao sem alteracoes - Terraform e Ansible
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "::group::Cenario 3 - Reexecucao sem alteracoes: Terraform plan"
+          terraform -chdir=terraform plan -input=false -no-color -lock-timeout=5m -out=plan-idem.bin
+          terraform -chdir=terraform show -json plan-idem.bin | jq -e '
+            def permitido:
+              .change.actions == ["no-op"] or
+              (.address == "azurerm_resource_group.main"
+               and .change.actions == ["update"]
+               and ((.change.before | del(.tags,.tags_all)) ==
+                    (.change.after | del(.tags,.tags_all))));
+            [.resource_changes[]? | select(permitido | not)] | length == 0
+          '
+          terraform -chdir=terraform show -json plan-idem.bin | jq -e '[.resource_changes[]? | select(.change.actions != ["no-op"])] | length == 0'
+          echo "PM04_TERRAFORM_SEM_MUDANCAS"
+          echo "::endgroup::"
+          terraform -chdir=terraform apply -input=false -no-color plan-idem.bin
+          echo "::group::Cenario 3 - Reexecucao sem alteracoes: Ansible via Azure Run Command"
+          RESULTADO=$(az vm run-command invoke \
+            --resource-group rg-tudoapp-projetointegrador-dev \
+            --name vm-tudoapp-projetointegrador-dev-app \
+            --command-id RunShellScript \
+            --scripts @scripts/pm04-ansible-run-command.sh \
+            --parameters "$GITHUB_SHA" stable-alpine jq false \
+            --query 'value[].message' -o tsv)
+          echo "$RESULTADO"
+          [[ "$RESULTADO" == *"PM04_ANSIBLE_OK"* ]] || { echo "::error::Ansible nao confirmou a manutencao"; exit 1; }
+          [[ "$RESULTADO" == *"changed=0"* ]] || { echo "::error::Ansible nao foi idempotente"; exit 1; }
+          echo "PM04_ANSIBLE_IDEMPOTENTE_OK"
+          echo "::endgroup::"
+          curl -fsS --retry 5 --retry-delay 5 https://20-226-46-100.sslip.io/todos >/dev/null
+          echo "PM04_IDEMPOTENCIA_OK"
+
