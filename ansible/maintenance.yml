@@ -1,0 +1,100 @@
+---
+- name: PM04 - manutencao local via Azure Run Command
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Conferir parametros da manutencao
+      ansible.builtin.assert:
+        that:
+          - maintenance_tag in ['alpine', 'stable-alpine']
+          - maintenance_package in ['jq', 'unzip', 'git']
+          - (update_os | string | lower) in ['true', 'false']
+
+    - name: Instalar pacote adicional solicitado
+      ansible.builtin.apt:
+        name: "{{ maintenance_package }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Atualizar pacotes do sistema apenas quando solicitado
+      ansible.builtin.apt:
+        upgrade: safe
+        update_cache: true
+        cache_valid_time: 3600
+      when: update_os | bool
+
+    - name: Inspecionar conteiner de demonstracao
+      ansible.builtin.command:
+        argv: [docker, inspect, pm04-manutencao-demo]
+      register: demo_info
+      failed_when: false
+      changed_when: false
+
+    - name: Identificar imagem atual e estado do conteiner
+      ansible.builtin.set_fact:
+        current_image: "{{ (demo_info.stdout | from_json)[0].Config.Image if demo_info.rc == 0 else '' }}"
+        demo_running: "{{ (demo_info.stdout | from_json)[0].State.Running if demo_info.rc == 0 else false }}"
+
+    - name: Baixar imagem quando a versao mudar
+      ansible.builtin.command:
+        argv: [docker, pull, "nginx:{{ maintenance_tag }}"]
+      when: current_image != 'nginx:' ~ maintenance_tag
+
+    - name: Remover somente o conteiner de demonstracao antigo
+      ansible.builtin.command:
+        argv: [docker, rm, -f, pm04-manutencao-demo]
+      when:
+        - demo_info.rc == 0
+        - current_image != 'nginx:' ~ maintenance_tag
+
+    - name: Criar o conteiner isolado da demonstracao
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - -d
+          - --name
+          - pm04-manutencao-demo
+          - --restart
+          - unless-stopped
+          - -p
+          - '127.0.0.1:8088:80'
+          - "nginx:{{ maintenance_tag }}"
+      when: current_image != 'nginx:' ~ maintenance_tag
+
+    - name: Reiniciar a demonstracao caso esteja parada
+      ansible.builtin.command:
+        argv: [docker, start, pm04-manutencao-demo]
+      when:
+        - current_image == 'nginx:' ~ maintenance_tag
+        - not (demo_running | bool)
+
+    - name: Verificar resposta HTTP do conteiner demonstrativo
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8088/
+        status_code: 200
+      register: demo_health
+      until: demo_health.status | default(0) == 200
+      retries: 10
+      delay: 3
+      changed_when: false
+
+    - name: Verificar containers da aplicacao principal sem altera-los
+      ansible.builtin.command:
+        argv: [docker, ps, --format, "{{ '{{' }}.Names{{ '}}' }}"]
+      register: app_containers
+      changed_when: false
+
+    - name: Exigir que o backend e o frontend continuem rodando
+      ansible.builtin.assert:
+        that:
+          - "'todo-backend' in app_containers.stdout_lines"
+          - "'todo-frontend' in app_containers.stdout_lines"
+
+    - name: Resultado da manutencao Ansible
+      ansible.builtin.debug:
+        msg: "PM04_ANSIBLE_PLAYBOOK_OK"

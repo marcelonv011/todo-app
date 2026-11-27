@@ -1,0 +1,131 @@
+name: PM04 - Terraform e Ansible Integrados
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: "Escrever APLICAR para iniciar"
+        type: string
+        required: true
+      demo_label:
+        description: "Etiqueta de infraestrutura para demonstrar atualizacao"
+        type: choice
+        options: [inicial, etapa2]
+        default: inicial
+      docker_tag:
+        description: "Versao do Nginx de demonstracao (nao altera ToDo App)"
+        type: choice
+        options: [alpine, stable-alpine]
+        default: alpine
+      extra_package:
+        description: "Pacote adicional instalado pelo Ansible"
+        type: choice
+        options: [jq, unzip, git]
+        default: jq
+      update_os:
+        description: "Atualizar pacotes do sistema operacional"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pm04-terraform-apply
+  cancel-in-progress: false
+
+jobs:
+  terraform_ansible:
+    name: Terraform -> Ansible (VM existente)
+    if: github.ref == 'refs/heads/main' && inputs.confirmar == 'APLICAR'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_TERRAFORM_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_demonstration_tag: ${{ inputs.demo_label }}
+      DEMO_TAG: ${{ inputs.docker_tag }}
+      EXTRA_PACKAGE: ${{ inputs.extra_package }}
+      UPDATE_OS: ${{ inputs.update_os }}
+
+    steps:
+      - name: Baixar arquivos
+        uses: actions/checkout@v4
+
+      - name: Azure login com OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_TERRAFORM_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Preparar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.17.2'
+
+      - name: Copiar variaveis protegidas
+        shell: bash
+        env:
+          TFVARS_CONTENT: ${{ secrets.TF_VARS }}
+        run: |
+          test -n "$TFVARS_CONTENT"
+          umask 077
+          printf '%s\n' "$TFVARS_CONTENT" > terraform/terraform.tfvars
+
+      - name: Inicializar backend remoto
+        shell: bash
+        run: |
+          terraform -chdir=terraform init -input=false -reconfigure -backend-config="resource_group_name=rg-tudoapp-projetointegrador-state" -backend-config="storage_account_name=tudoappprojetointegrador" -backend-config="container_name=tfstate" -backend-config="key=todo/dev.terraform.tfstate" -backend-config="use_oidc=true" -backend-config="use_azuread_auth=true"
+
+      - name: Validar configuracao
+        run: terraform -chdir=terraform validate
+
+      - name: Planejar infraestrutura
+        run: terraform -chdir=terraform plan -input=false -no-color -lock-timeout=5m -out=plan.bin
+
+      - name: Bloquear alteracoes fora da etiqueta de demonstracao
+        shell: bash
+        run: |
+          terraform -chdir=terraform show -json plan.bin | jq -e '
+            def permitido:
+              .change.actions == ["no-op"] or
+              (.address == "azurerm_resource_group.main"
+               and .change.actions == ["update"]
+               and ((.change.before | del(.tags,.tags_all)) ==
+                    (.change.after | del(.tags,.tags_all))));
+            [.resource_changes[]? | select(permitido | not)] | length == 0
+          '
+          echo "PM04_PLAN_SEGURO: apenas etiqueta de demonstracao"
+
+      - name: Aplicar infraestrutura
+        run: terraform -chdir=terraform apply -input=false -no-color plan.bin
+
+      - name: Executar Ansible na VM via Azure Run Command
+        shell: bash
+        run: |
+          RESULTADO=$(az vm run-command invoke \
+            --resource-group rg-tudoapp-projetointegrador-dev \
+            --name vm-tudoapp-projetointegrador-dev-app \
+            --command-id RunShellScript \
+            --scripts @scripts/pm04-ansible-run-command.sh \
+            --parameters "$GITHUB_SHA" "$DEMO_TAG" "$EXTRA_PACKAGE" "$UPDATE_OS" \
+            --query 'value[].message' -o tsv)
+          echo "$RESULTADO"
+          if [[ "$RESULTADO" != *"PM04_ANSIBLE_OK"* ]]; then
+            echo "::error::Nao foi confirmada a manutencao Ansible"
+            exit 1
+          fi
+
+      - name: Verificar ToDo App publica
+        shell: bash
+        run: |
+          curl -fsS --retry 5 --retry-delay 5 https://20-226-46-100.sslip.io/todos >/dev/null
+          echo "PM04_INTEGRADO_OK"

@@ -12,7 +12,7 @@ locals {
 resource "azurerm_resource_group" "main" {
   name     = "rg-${local.prefix}"
   location = var.location
-  tags     = local.tags
+  tags     = merge(local.tags, { pm04_demo = var.demonstration_tag })
 }
 
 resource "azurerm_virtual_network" "main" {

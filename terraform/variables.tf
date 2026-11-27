@@ -66,3 +66,15 @@ variable "enable_nat_gateway" {
   description = "Si true, crea NAT Gateway para salida a internet de la VM MongoDB. Si false, elimina NAT e IP publica sin tocar las VMs ni discos."
   default     = true
 }
+
+# Etiqueta de demostracion para mostrar una actualizacion no destructiva con Terraform.
+variable "demonstration_tag" {
+  type        = string
+  description = "Etiqueta de prueba para la demostracion PM04"
+  default     = "inicial"
+
+  validation {
+    condition     = can(regex("^[a-z0-9-]{1,24}$", var.demonstration_tag))
+    error_message = "Usar entre 1 y 24 caracteres: minusculas, numeros o guiones."
+  }
+}
