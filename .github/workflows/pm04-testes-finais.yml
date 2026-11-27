@@ -30,7 +30,7 @@ jobs:
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
       ARM_USE_AZUREAD: "true"
-      TF_VAR_demonstration_tag: etapa2
+      TF_VAR_demonstration_tag: inicial
       TF_IN_AUTOMATION: "true"
 
     steps:
@@ -94,7 +94,7 @@ jobs:
             --name vm-tudoapp-projetointegrador-dev-app \
             --command-id RunShellScript \
             --scripts @scripts/pm04-ansible-run-command.sh \
-            --parameters "$GITHUB_SHA" stable-alpine jq false \
+            --parameters "$GITHUB_SHA" alpine jq false \
             --query 'value[].message' -o tsv)
           echo "$RESULTADO"
           [[ "$RESULTADO" == *"PM04_ANSIBLE_OK"* ]] || { echo "::error::Ansible nao confirmou a manutencao"; exit 1; }
@@ -128,7 +128,7 @@ jobs:
             --name vm-tudoapp-projetointegrador-dev-app \
             --command-id RunShellScript \
             --scripts @scripts/pm04-ansible-run-command.sh \
-            --parameters "$GITHUB_SHA" stable-alpine jq false \
+            --parameters "$GITHUB_SHA" alpine jq false \
             --query 'value[].message' -o tsv)
           echo "$RESULTADO"
           [[ "$RESULTADO" == *"PM04_ANSIBLE_OK"* ]] || { echo "::error::Ansible nao confirmou a manutencao"; exit 1; }
